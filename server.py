@@ -7,10 +7,15 @@ ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '1']
 
 # 創建撲克牌
 deck = [f"{rank}_of_{suit}" for suit in suits for rank in ranks]
+used_cards = []
 
 # 全局變數儲存共享的隨機撲克牌
 shared_cards = random.sample(deck, 2)
 print(f"Server generated cards: {shared_cards}")
+
+used_cards.extend(shared_cards)
+deck = [card for card in deck if card not in used_cards]
+print(f"Used cards: {used_cards}")
 
 # 所有玩家的名稱
 players = {}
@@ -30,7 +35,7 @@ def broadcast_new_cards(new_cards):
 
 # 處理每個玩家的登入
 def handle_client(client_socket):
-    global shared_cards
+    global shared_cards, deck, used_cards
 
     try:
         # 接收玩家的名字
@@ -63,10 +68,14 @@ def handle_client(client_socket):
                 # 發送共享的撲克牌
                 client_socket.send(','.join(shared_cards).encode('utf-8'))
             elif message == "NEW_CARDS":
-
                 # 重新生成撲克牌
                 shared_cards = random.sample(deck, 2)
                 print(f"New cards generated : {shared_cards}")
+
+                used_cards.extend(shared_cards)
+                deck = [card for card in deck if card not in used_cards]
+
+                print(f"Used cards: {used_cards}")
                 
                 # 發送新撲克牌給所有在線的玩家
                 broadcast_new_cards(shared_cards)

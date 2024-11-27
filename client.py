@@ -15,6 +15,8 @@ deck = [f"{rank}_of_{suit}" for suit in suits for rank in ranks]
 random_cards = None
 replacement_card = None
 
+player_balance = 2000  # 玩家的初始餘額
+
 # 連接到伺服器
 def connect_to_server():
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -125,13 +127,15 @@ def show_login_page():
 
 # 牌桌頁面顯示
 def show_table_page(username):
-    global random_cards
+    global random_cards, player_balance
 
     # 清空widget
     for widget in root.winfo_children():
         widget.destroy()
 
     tk.Label(root, text=f"Welcome, {username}").grid(row=0, column=0, padx=10, pady=10)
+
+    tk.Label(root, text=f"Balance: {player_balance}").grid(row=0, column=1, padx=10, pady=10)
 
     # 顯示撲克牌
     if random_cards:
@@ -180,19 +184,42 @@ def display_cards(cards):
 
 # 按下賭注按鈕後的函數
 def on_bet_click(bet_amount):
-    global replacement_card, random_cards
-    if not random_cards:
-        print("random_cards is not initialized.")
+    global replacement_card, random_cards, player_balance, player_name
+    if not random_cards or len(random_cards) < 2:
+        print("尚未發牌或牌數不足。")
+        return
+    
+    # 餘額不足
+    if player_balance < bet_amount:
+        print("餘額不足，無法繼續遊戲。")
+        messagebox.showinfo("Insufficient Balance", "餘額不足，無法繼續遊戲。")
         return
 
-    print(f"Bet amount: {bet_amount}")
+    print(f"下注金額: {bet_amount}")
+    print(f"目前發出的牌: {random_cards}")
 
-    print(f"Current random_cards: {random_cards}")
+    # 抽取第三張牌並與前兩張牌進行比較
+    third_card = random.choice(deck)  # 可以根據實際情況從伺服器獲取第三張牌
+    print(f"抽到的第三張牌: {third_card}")
 
-    replacement_card = random.choice(deck)
-    print(f"Replacing 'back' with: {replacement_card}")
-
+    # 顯示第三張牌
+    replacement_card = third_card
     display_cards(random_cards)
+
+    # 比較前兩張牌與第三張牌，根據結果調整玩家餘額
+    result = compare_cards(random_cards[0], random_cards[1], third_card, bet_amount)
+
+    # 根據結果調整玩家的餘額
+    player_balance += result
+
+    print(f"玩家的新餘額: {player_balance}")
+
+    show_table_page(player_name);
+
+     # 如果餘額小於 0，顯示遊戲結束訊息並登出
+    if player_balance <= 0:
+        messagebox.showinfo("Game Over", "餘額不足，遊戲結束！。")
+        on_logout_click()  # 強制登出
 
 # 向伺服器請求新的撲克牌，並更新顯示
 def on_draw_cards_click():
@@ -224,6 +251,39 @@ def listen_for_broadcast():
         except Exception as e:
             print(f"Error listening for broadcast: {e}")
             break
+
+# 比較三張牌的函數
+def compare_cards(first_card, second_card, third_card, bet_amount):
+    try:
+        # 從卡片字符串中提取數值部分
+        first_rank = int(first_card.split('_')[0])
+        second_rank = int(second_card.split('_')[0])
+        third_rank = int(third_card.split('_')[0])
+
+        # 確定前兩張牌的範圍
+        lower = min(first_rank, second_rank)
+        upper = max(first_rank, second_rank)
+
+        # 根據第三張牌的數值進行比較
+        if lower < third_rank < upper:
+            # 第三張牌在前兩張牌之間，玩家贏回注金
+            print(f"玩家贏！第三張牌 {third_rank} 在 {lower} 和 {upper} 之間。")
+            messagebox.showinfo("Goal", f"增加 {bet_amount} ！")
+            return bet_amount  # 贏回注金
+        elif third_rank == first_rank or third_rank == second_rank:
+            # 第三張牌與前兩張牌中的某一張相等，玩家輸掉雙倍注金
+            print(f"玩家輸掉雙倍注金！第三張牌 {third_rank} 與 {first_rank} 或 {second_rank} 相同。")
+            messagebox.showinfo("中龍柱", f"扣除雙倍 {-2 * bet_amount} ")
+            return -2 * bet_amount  # 輸掉雙倍注金
+        else:
+            # 第三張牌不在範圍內，玩家輸掉注金
+            print(f"玩家輸！第三張牌 {third_rank} 不在 {lower} 和 {upper} 之間。")
+            messagebox.showinfo("沒進", f"扣除 {-bet_amount} ")
+            return -bet_amount  # 輸掉注金
+    except Exception as e:
+        print(f"比較牌時發生錯誤: {e}")
+        return 0  # 發生錯誤時不改變金額
+
 
 # 登出函數
 def on_logout_click():
