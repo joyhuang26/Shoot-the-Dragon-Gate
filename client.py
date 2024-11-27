@@ -31,24 +31,23 @@ def request_and_show_table_page(player_name):
     global client_socket, random_cards
 
     if client_socket is None:
-        messagebox.showerror("Connection Error", "No connection to server.")
+        messagebox.showerror("連線錯誤", "無法連線到伺服器。")
         return
 
     try:
         # 接收撲克牌資料
         cards_data = client_socket.recv(1024).decode('utf-8').strip()
-        print(f"Received cards data: {cards_data}")  
+        print(f"收到的撲克牌資料: {cards_data}")  
 
         random_cards = cards_data.split(',')  # 將撲克牌資料解析為列表
-        print(f"Parsed cards: {random_cards}")
+        #print(f"Parsed cards: {random_cards}")
         
         display_cards(random_cards) 
-        print("Updated cards displayed on table")
+        print("更新的撲克牌已顯示到牌桌頁面")
 
-        
         show_table_page(player_name)
     except Exception as e:
-        messagebox.showerror("Communication Error", f"Error communicating with server: {e}")
+        messagebox.showerror("server請求失敗", f"和伺服器連線錯誤: {e}")
 
 # 登入函數
 def on_login_click():
@@ -56,7 +55,7 @@ def on_login_click():
     player_name = name_entry.get()  # 取得使用者輸入的名字
 
     if not player_name:
-        messagebox.showwarning("Input Error", "Please enter a player name.")
+        messagebox.showwarning("輸入錯誤", "請輸入玩家名字")
         return
 
     client_socket = connect_to_server()
@@ -84,7 +83,7 @@ def on_register_click():
     player_name = name_entry.get()
 
     if not player_name: 
-        messagebox.showwarning("Input Error", "Please enter a player name.")
+        messagebox.showwarning("輸入錯誤", "請輸入玩家名字")
         return
 
     client_socket = connect_to_server()
@@ -95,7 +94,7 @@ def on_register_click():
     server_response = client_socket.recv(1024).decode('utf-8')
 
     if server_response == "OK":
-        messagebox.showinfo("Info", "Registration successful!")
+        messagebox.showinfo("Info", "註冊成功!")
         
         # 跳轉到牌桌頁面
         client_socket.send("GET_CARDS".encode('utf-8'))
@@ -115,14 +114,14 @@ def show_login_page():
     for widget in root.winfo_children():
         widget.destroy()
 
-    tk.Label(root, text="Enter your name:").grid(row=0, column=0, padx=10, pady=10)
+    tk.Label(root, text="使用者名稱:").grid(row=0, column=0, padx=10, pady=10)
     name_entry = tk.Entry(root)
     name_entry.grid(row=1, column=0, padx=10, pady=10)
 
-    login_button = tk.Button(root, text="Login", command=on_login_click)
+    login_button = tk.Button(root, text="登入", command=on_login_click)
     login_button.grid(row=2, column=0, padx=10, pady=10)
 
-    register_button = tk.Button(root, text="Register", command=on_register_click)
+    register_button = tk.Button(root, text="註冊", command=on_register_click)
     register_button.grid(row=3, column=0, padx=10, pady=10)
 
 # 牌桌頁面顯示
@@ -133,16 +132,16 @@ def show_table_page(username):
     for widget in root.winfo_children():
         widget.destroy()
 
-    tk.Label(root, text=f"Welcome, {username}").grid(row=0, column=0, padx=10, pady=10)
+    tk.Label(root, text=f"歡迎, {username}").grid(row=0, column=0, padx=10, pady=10)
 
-    tk.Label(root, text=f"Balance: {player_balance}").grid(row=0, column=1, padx=10, pady=10)
+    tk.Label(root, text=f"籌碼: {player_balance}").grid(row=0, column=1, padx=10, pady=10)
 
     # 顯示撲克牌
     if random_cards:
         display_cards(random_cards)
 
     # 發牌按鈕
-    draw_button = tk.Button(root, text="Draw Cards", command=on_draw_cards_click)
+    draw_button = tk.Button(root, text="發牌", command=on_draw_cards_click)
     draw_button.grid(row=2, column=0, padx=10, pady=10)
 
     # 賭注按鈕
@@ -153,7 +152,7 @@ def show_table_page(username):
     bet_200_button.grid(row=3, column=1, padx=10, pady=10)
 
     # 登出按鈕
-    logout_button = tk.Button(root, text="Logout", command=on_logout_click)
+    logout_button = tk.Button(root, text="登出", command=on_logout_click)
     logout_button.grid(row=4, column=0, padx=10, pady=10)
 
 # 用來顯示撲克牌
@@ -178,7 +177,7 @@ def display_cards(cards):
             card_label.image = card_image 
             card_label.grid(row=1, column=i, padx=10, pady=10) 
         else:
-            print(f"Image not found: {image_path}")
+            print(f"找不到圖片: {image_path}")
 
     root.update()
 
@@ -192,7 +191,7 @@ def on_bet_click(bet_amount):
     # 餘額不足
     if player_balance < bet_amount:
         print("餘額不足，無法繼續遊戲。")
-        messagebox.showinfo("Insufficient Balance", "餘額不足，無法繼續遊戲。")
+        messagebox.showinfo("餘額不足", "餘額不足，無法繼續遊戲。")
         return
 
     print(f"下注金額: {bet_amount}")
@@ -226,15 +225,15 @@ def on_draw_cards_click():
     global client_socket, random_cards, player_name
 
     if client_socket is None:
-        messagebox.showerror("Connection Error", "No connection to server.")
+        messagebox.showerror("連線錯誤", "無法連線到伺服器")
         return
 
     try:
         client_socket.send("NEW_CARDS".encode('utf-8'))  # 發送發牌請求
-        print("Requested new cards from server.")
+        print("向server請求新的撲克牌")
 
     except Exception as e:
-        messagebox.showerror("Communication Error", f"Error communicating with server: {e}")
+        messagebox.showerror("server請求失敗", f"和伺服器連線錯誤: {e}")
 
 # 監聽廣播的線程並更新
 def listen_for_broadcast():
@@ -243,13 +242,13 @@ def listen_for_broadcast():
         try:
             # 接收伺服器廣播的撲克牌
             cards_data = client_socket.recv(1024).decode('utf-8').strip()
-            print(f"Broadcast received: {cards_data}")
+            print(f"伺服器廣播訊息: {cards_data}")
 
             random_cards = cards_data.split(',')  # 更新隨機撲克牌
             display_cards(random_cards) 
-            print("Updated cards via broadcast")
+            print("透過廣播更新撲克牌")
         except Exception as e:
-            print(f"Error listening for broadcast: {e}")
+            print(f"接收廣播時發生錯誤: {e}")
             break
 
 # 比較三張牌的函數
@@ -297,7 +296,7 @@ def on_logout_click():
 
 # 創建主視窗
 root = tk.Tk()
-root.title("Poker Game")
+root.title("Shoot the ragon Gate")
 
 # 顯示登入頁面
 show_login_page()
