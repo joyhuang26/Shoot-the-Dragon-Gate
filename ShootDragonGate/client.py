@@ -29,7 +29,6 @@ draw_button = None
 current_player_name = None
 current_player_id = None
 
-
 # 連接到伺服器
 def connect_to_server():
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -109,6 +108,7 @@ def request_and_show_table_page(player_name):
 # 登入函數
 def on_login_click():
     global client_socket, player_name, player_balance, username
+
     player_name = name_entry.get()  # 取得使用者輸入的名字
     username = name_entry.get()
 
@@ -142,6 +142,7 @@ def on_login_click():
 # 註冊函數
 def on_register_click():
     global client_socket, player_name, username
+
     player_name = name_entry.get()
     username = name_entry.get()
 
@@ -283,7 +284,7 @@ def on_bet_click(bet_amount):
 
     print(f"玩家的新餘額: {player_balance}")
 
-    if round_count < max_rounds:
+    if current_round < max_rounds:
         show_table_page(player_name);
 
      # 如果餘額小於 0，顯示遊戲結束訊息並登出
@@ -316,11 +317,11 @@ def listen_for_broadcast():
             buffer += data
             while "\n" in buffer:
                 line, buffer = buffer.split("\n", 1)
-                if handle_server_message(line.strip()):  # 如果处理了 GAME_OVER 消息
-                    print("监听结束，停止接收广播")
-                    return  # 停止监听
+                if handle_server_message(line.strip()):
+                    print("監聽結束，停止接收廣播")
+                    return  # 停止監聽
         except Exception as e:
-            print(f"监听广播时发生错误: {e}")
+            print(f"listen_for_broadcast 監聽廣播時發生錯誤: {e}")
             break
 
 def handle_server_message(message):
@@ -338,7 +339,7 @@ def handle_server_message(message):
             
             # 以下逻辑只在游戏未结束时执行
             if int(current_round) >= max_rounds:
-                print("游戏已结束，忽略所有消息")
+                print("遊戲已結束，忽略所有消息")
                 return False
 
             if message.startswith("TURN:"):

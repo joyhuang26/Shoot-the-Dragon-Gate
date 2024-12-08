@@ -71,7 +71,7 @@ def check_game_over():
         winner_balance = balances[winner_id]
         print(f"遊戲結束，贏家: {winner_name}, 編號: {winner_id}, 籌碼餘額: {winner_balance}")
 
-        # 广播游戏结束消息
+        # 廣播遊戲結束消息
         for player_id, (player_name, player_socket) in players.items():
             try:
                 message = f"GAME_OVER: 贏家是 {winner_name}，編號 {winner_id}，籌碼餘額 {winner_balance}\n"
@@ -79,7 +79,7 @@ def check_game_over():
             except Exception as e:
                 print(f"發送 GAME_OVER 消息給玩家 {player_name} 時出錯: {e}")
 
-        # 停止广播其他消息
+        # 停止廣播其他消息
         turn_order.clear()
         return True
 
@@ -145,11 +145,12 @@ def handle_client(client_socket):
                 player_id = len(players) + 1
                 players[player_id] = (player_name, client_socket)
                 turn_order.append(player_id)
+                balances[player_id] = 2000  # 初始化玩家籌碼為 2000
                 registered_players[player_name] = True
                 logged_in_players[player_name] = False
                 client_socket.send("OK".encode('utf-8'))
                 print(f"玩家 {player_name} 已註冊成功。")
-                # 延迟确保消息顺序正确
+                # 延遲確保消息正確
                 time.sleep(0.1)
                 #broadcast_current_turn()
 
@@ -237,20 +238,17 @@ def handle_client(client_socket):
         # 關閉連接並從玩家列表中移除
         if player_name in players:
             del players[player_id]
-        if player_name in balances:
             del balances[player_id]
+            turn_order.remove(player_id)
         if player_name in logged_in_players:
             logged_in_players[player_name] = True;
-
-        if player_name in turn_order:
-            turn_order.remove(player_id)
         client_socket.close()
         if round_count < max_rounds:
             broadcast_balances()
         
 
 def accept_connections():
-    print("server啟動，等待玩家連線...")
+    print("server 啟動，等待玩家連線...")
     while True:
         try:
             client_socket, client_address = server_socket.accept()
