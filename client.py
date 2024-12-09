@@ -29,7 +29,6 @@ draw_button = None
 current_player_name = None
 current_player_id = None
 
-
 # 連接到伺服器
 def connect_to_server():
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -39,18 +38,21 @@ def connect_to_server():
 # 客戶端與伺服器建立連接
 client_socket = None
 
-def update_turn_info(current_round, player_name):
-    global current_player_name, current_player_id, bet_100_button, bet_200_button, draw_button
+def update_turn_info(current_round, current_player_name):
+    global current_player_id, bet_100_button, bet_200_button, draw_button
 
-    current_player_name = player_name
-
+    # 如果遊戲结束，不更新界面
+    if int(current_round) >= max_rounds:
+        print("遊戲結束，停止更新")
+        return
+    
     for widget in root.grid_slaves(row=0, column=2):  # 清理之前的 "回合" 信息
         widget.destroy()
     for widget in root.grid_slaves(row=0, column=3):  # 清理之前的 "輪到玩家" 信息
         widget.destroy()
 
     tk.Label(root, text=f"回合: {current_round}").grid(row=0, column=2, padx=10, pady=10)
-    tk.Label(root, text=f"輪到玩家: {player_name}").grid(row=0, column=3, padx=10, pady=10)
+    tk.Label(root, text=f"輪到玩家: {current_player_name}").grid(row=0, column=3, padx=10, pady=10)
 
     # 鎖住非輪到玩家的按鈕
     try:
@@ -71,7 +73,7 @@ def update_turn_info(current_round, player_name):
 
 # 更新其他玩家餘額
 def update_balances_gui(balances):
-    for widget in root.grid_slaves(row=2, column=2):  # 清空第2列的GUI显示
+    for widget in root.grid_slaves(row=2, column=2):  # 清空第2列的GUI
         widget.destroy()
     
     tk.Label(root, text="每位玩家籌碼餘額:").grid(row=2, column=2, padx=10, pady=10)
@@ -90,21 +92,23 @@ def request_and_show_table_page(player_name):
     try:
         # 接收撲克牌資料
         cards_data = client_socket.recv(1024).decode('utf-8').strip()
-        print(f"收到的撲克牌資料: {cards_data}")  
+        print(f"收到的撲克牌資料: {cards_data}")
+        if cards_data.startswith("CARDS:"):
+            cards_data = cards_data.split(":")[1].strip()
 
-        random_cards = cards_data.split(',')  # 將撲克牌資料解析為列表
-        #print(f"Parsed cards: {random_cards}")
-        
-        display_cards(random_cards) 
-        print("更新的撲克牌已顯示到牌桌頁面")
+            random_cards = cards_data.split(',')  # 將撲克牌資料解析為列表
+            
+            display_cards(random_cards) 
+            print(f"更新的撲克牌已顯示到牌桌頁面")
 
-        show_table_page(player_name)
+            show_table_page(player_name)
     except Exception as e:
         messagebox.showerror("server請求失敗", f"和伺服器連線錯誤: {e}")
 
 # 登入函數
 def on_login_click():
     global client_socket, player_name, player_balance, username
+
     player_name = name_entry.get()  # 取得使用者輸入的名字
     username = name_entry.get()
 
@@ -137,8 +141,10 @@ def on_login_click():
 
 # 註冊函數
 def on_register_click():
-    global client_socket, player_name
+    global client_socket, player_name, username
+
     player_name = name_entry.get()
+    username = name_entry.get()
 
     if not player_name: 
         messagebox.showwarning("輸入錯誤", "請輸入玩家名字")
@@ -223,7 +229,7 @@ def show_table_page(username):
 def display_cards(cards):
     global replacement_card
 
-    for widget in root.grid_slaves(row=1):  # 清除第 1 行的撲克牌控件
+    for widget in root.grid_slaves(row=1):  # 清除第 1 行的撲克牌 widget
         widget.destroy()
 
     cards_with_back = [cards[0], replacement_card if replacement_card else "back", cards[1]]
@@ -277,11 +283,9 @@ def on_bet_click(bet_amount):
     client_socket.send(f"UPDATE_BALANCE:{player_balance}".encode('utf-8'))
 
     print(f"玩家的新餘額: {player_balance}")
-    
-    # 调用更新玩家信息
-    update_turn_info(current_round, current_player_name)
 
-    show_table_page(player_name);
+    if current_round < max_rounds:
+        show_table_page(player_name);
 
      # 如果餘額小於 0，顯示遊戲結束訊息並登出
     if player_balance <= 0:
@@ -305,7 +309,7 @@ def on_draw_cards_click():
 
 # 監聽廣播的線程並更新
 def listen_for_broadcast():
-    global client_socket, random_cards, current_player_name, current_player_id, current_round
+    global client_socket
     buffer = ""
     while True:
         try:
@@ -314,9 +318,10 @@ def listen_for_broadcast():
             while "\n" in buffer:
                 line, buffer = buffer.split("\n", 1)
                 if handle_server_message(line.strip()):
-                    return  # 收到 GAME_OVER 消息後停止監聽
+                    print("監聽結束，停止接收廣播")
+                    return  # 停止監聽
         except Exception as e:
-            print(f"接收廣播時發生錯誤: {e}")
+            print(f"listen_for_broadcast 監聽廣播時發生錯誤: {e}")
             break
 
 def handle_server_message(message):
@@ -324,8 +329,19 @@ def handle_server_message(message):
     while True:
         try:
             message = client_socket.recv(1024).decode('utf-8').strip()
-            time.sleep(0.5)
             print(f"handle_server_message 接收到 server 廣播: {message}")
+            if message.startswith("GAME_OVER:"):
+                game_over_info = message.split(":", 1)[1].strip()
+                print(f"收到遊戲結束消息: {game_over_info}")
+                messagebox.showinfo("遊戲結束", message.split(":", 1)[1])
+                on_logout_click()
+                return True
+            
+            # 只在未結束遊戲下進行
+            if int(current_round) >= max_rounds:
+                print("遊戲已結束，忽略所有消息")
+                return False
+
             if message.startswith("TURN:"):
                 turn_data = message.split(":")[1].strip()
                 print(f"接收到 TURN 廣播消息：{turn_data}")
@@ -334,20 +350,15 @@ def handle_server_message(message):
 
                 update_turn_info(current_round, current_player_name)
             elif message.startswith("BALANCES:"):
-                # 更新余額
+                # 更新餘額
                 balances = json.loads(message.split(":", 1)[1])
+                print(f"接收到 BALANCE 廣播消息：{balances}")
                 current_round_int = int(current_round)
                 if current_round_int < max_rounds:
                     update_balances_gui(balances)
-            elif message.startswith("GAME_OVER:"):
-                game_over_info = message.split(":", 1)[1].strip()
-                print(f"收到遊戲結束消息: {game_over_info}")
-                messagebox.showinfo("遊戲結束", message.split(":", 1)[1])
-                on_logout_click()
-                break
-            else:
+            elif message.startswith("CARDS:"):
                 # 接收伺服器廣播的撲克牌
-                cards_data = message
+                cards_data = message.split(":")[1].strip()
                 print(f"伺服器廣播訊息: {cards_data}")
 
                 random_cards = cards_data.split(',')  # 更新隨機撲克牌

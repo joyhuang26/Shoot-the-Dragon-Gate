@@ -45,6 +45,7 @@ server_socket.listen(5)
 # 廣播當前輪到的玩家
 def broadcast_current_turn():
     global turn_order, current_turn_index
+
     try:
         current_player_id = turn_order[current_turn_index]
         current_player_name = players[current_player_id][0]
@@ -63,23 +64,25 @@ def broadcast_current_turn():
 def check_game_over():
     global turn_order, balances
     if round_count >= max_rounds:
-        # 找到籌碼餘額最多的玩家
         winner_id = max(balances, key=balances.get)
         winner_name = players[winner_id][0]
         winner_balance = balances[winner_id]
-        print(f"winner_id: {winner_id}, winner_name: {winner_name}, winner_balance: {winner_balance}")
+        print(f"遊戲結束，贏家: {winner_name}, 編號: {winner_id}, 籌碼餘額: {winner_balance}")
+
+        # 廣播遊戲結束消息
         for player_id, (player_name, player_socket) in players.items():
-            player_socket = players[player_id][1]
             try:
-                message = f"GAME_OVER:贏家為 {winner_name}，編號 {winner_id}，籌碼餘額 {winner_balance}\n"
-                print(f"向玩家 {player_name} 發送遊戲結束消息: {message.strip()}")
+                message = f"GAME_OVER: 贏家是 {winner_name}，編號 {winner_id}，籌碼餘額 {winner_balance}\n"
                 player_socket.send(message.encode('utf-8'))
-                #print(f"向玩家{player_name}傳送: winner_id: {winner_id}, winner_name: {winner_name}, winner_balance: {winner_balance}")
             except Exception as e:
-                print(f"廣播遊戲結束時出錯: {e}")
-        print(f"遊戲結束，獲勝者為 {winner_name}")
+                print(f"發送 GAME_OVER 消息給玩家 {player_name} 時出錯: {e}")
+
+        # 停止廣播其他消息
+        turn_order.clear()
         return True
+
     return False
+
 
 # 輪到下一位玩家
 def update_turn():
@@ -110,9 +113,12 @@ def broadcast_balances():
 
 # 發送新撲克牌給所有在線的玩家
 def broadcast_new_cards(new_cards):
+    message = f"CARDS: {','.join(new_cards)}\n"
+    #print(f"發送新撲克牌給所有在線的玩家: {message.strip()}")
     for player_id, (player_name, player_socket) in players.items():
         try:
-            player_socket.send(','.join(new_cards).encode('utf-8'))
+            player_socket.send(message.encode('utf-8'))
+            print(f"發送新撲克牌給所有在線的玩家: {message.strip()}")
         except Exception as e:
             print(f"向 {player_name} 發送撲克牌時出錯: {e}")
 
@@ -133,10 +139,18 @@ def handle_client(client_socket):
                 client_socket.send("ERROR: 名字已被註冊，請重新輸入。".encode('utf-8'))
                 print(f"ERROR: 名字已被註冊，請重新輸入。")
             else:
+                # 玩家編號從 1 開始
+                player_id = len(players) + 1
+                players[player_id] = (player_name, client_socket)
+                turn_order.append(player_id)
+                balances[player_id] = 2000  # 初始化玩家籌碼為 2000
                 registered_players[player_name] = True
                 logged_in_players[player_name] = False
                 client_socket.send("OK".encode('utf-8'))
                 print(f"玩家 {player_name} 已註冊成功。")
+                # 延遲確保消息正確
+                time.sleep(0.1)
+                #broadcast_current_turn()
 
         elif player_message.startswith("LOGIN:"):
             # 處理玩家登入
@@ -166,11 +180,8 @@ def handle_client(client_socket):
                 print(f"玩家 {player_name} 已經加入了遊戲，分配編號為 {player_id}，編號順序: {turn_order}")
                 client_socket.send("OK".encode('utf-8'))
                 print(f"已向玩家 {player_name} 發送 OK 確認登入消息")
-        time.sleep(0.5)
-        # 廣播輪到的玩家
-        broadcast_current_turn()
-        
-
+                broadcast_current_turn()
+            
         # 這裡可以讓玩家進入同一個牌桌頁面，開始遊戲
         # 當所有玩家都登入後，可以開始發牌
         # 處理客戶端請求
@@ -189,9 +200,14 @@ def handle_client(client_socket):
                     update_turn()
             elif message == "GET_CARDS":
                 print(f"發送給 {player_name}: {shared_cards}")
+                message = f"CARDS: {','.join(shared_cards)}\n"
 
                 # 發送共享的撲克牌
-                client_socket.send(','.join(shared_cards).encode('utf-8'))
+                client_socket.send(message.encode('utf-8'))
+
+                time.sleep(0.1)
+                broadcast_current_turn()
+
             elif message == "NEW_CARDS":
                 # 重新生成撲克牌
                 if len(deck) >= 2:
@@ -220,20 +236,17 @@ def handle_client(client_socket):
         # 關閉連接並從玩家列表中移除
         if player_name in players:
             del players[player_id]
-        if player_name in balances:
             del balances[player_id]
+            turn_order.remove(player_id)
         if player_name in logged_in_players:
             logged_in_players[player_name] = True;
-
-        if player_name in turn_order:
-            turn_order.remove(player_id)
         client_socket.close()
         if round_count < max_rounds:
             broadcast_balances()
         
 
 def accept_connections():
-    print("server啟動，等待玩家連線...")
+    print("server 啟動，等待玩家連線...")
     while True:
         try:
             client_socket, client_address = server_socket.accept()
