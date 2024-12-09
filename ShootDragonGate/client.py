@@ -41,11 +41,13 @@ client_socket = None
 def update_turn_info(current_round, current_player_name):
     global current_player_id, bet_100_button, bet_200_button, draw_button
 
-    # 如果游戏结束，不更新界面
-    if int(current_round) >= max_rounds:
-        print("游戏结束，停止更新回合信息")
+    # 如果遊戲結束，不更新界面
+    if int(current_round) == int(max_rounds):
+        print("遊戲結束，停止更新回合信息")
         return
     
+    print(f"update_turn_info: current_round = {current_round}")
+
     for widget in root.grid_slaves(row=0, column=2):  # 清理之前的 "回合" 信息
         widget.destroy()
     for widget in root.grid_slaves(row=0, column=3):  # 清理之前的 "輪到玩家" 信息
@@ -73,6 +75,14 @@ def update_turn_info(current_round, current_player_name):
 
 # 更新其他玩家餘額
 def update_balances_gui(balances):
+
+    # 如果遊戲結束，不更新界面
+    if int(current_round) == int(max_rounds):
+        print("遊戲結束，停止更新回合信息")
+        return
+    
+    print(f"update_balances_gui: current_round = {current_round}")
+
     for widget in root.grid_slaves(row=2, column=2):  # 清空第2列的GUI显示
         widget.destroy()
     
@@ -193,6 +203,14 @@ def show_login_page():
 def show_table_page(username):
     global random_cards, player_balance, bet_100_button, bet_200_button, draw_button
 
+    # 如果遊戲結束，不更新界面
+    if int(current_round) == int(max_rounds):
+        reset_game_state()
+        print(f"遊戲結束，停止更新介面信息")
+        return
+    
+    print(f"show_table_page: current_round = {current_round}, max_rounds = {max_rounds}")
+
     # 清空widget
     for widget in root.winfo_children():
         widget.destroy()
@@ -284,8 +302,8 @@ def on_bet_click(bet_amount):
 
     print(f"玩家的新餘額: {player_balance}")
 
-    if current_round < max_rounds:
-        show_table_page(player_name);
+    if int(current_round) < int(max_rounds):
+        show_table_page(player_name)
 
      # 如果餘額小於 0，顯示遊戲結束訊息並登出
     if player_balance <= 0:
@@ -320,9 +338,44 @@ def listen_for_broadcast():
                 if handle_server_message(line.strip()):
                     print("監聽結束，停止接收廣播")
                     return  # 停止監聽
+                elif line.startswith("CARDS:"):
+                    handle_cards_message(line)
+                elif line.startswith("TURN:"):
+                    handle_turn_message(line)
+                else:
+                    print(f"接收到未知訊息: {line}")
+                time.sleep(0.1)  # 增加小延時，避免訊息重疊
         except Exception as e:
             print(f"listen_for_broadcast 監聽廣播時發生錯誤: {e}")
             break
+
+def handle_turn_message(message):
+    # 處理回合訊息
+    print(f"接收到回合訊息: {message}")
+    # 解析並更新遊戲的回合
+    # 假設訊息格式為 TURN: {回合數},{當前玩家ID},{當前玩家名稱}
+    parts = message.split(":")[1].strip().split(",")
+    current_round = int(parts[0])
+
+    if parts[1] == "GAME_OVER":
+        # 當收到 GAME_OVER 訊息時，登出並回到登入頁面
+        print("遊戲結束，收到 GAME_OVER 訊息")
+        messagebox.showinfo("遊戲結束", "遊戲結束，感謝參與！")
+        on_logout_click()  # 強制登出並回到登入頁面
+        return
+    
+    current_turn_index = int(parts[1])
+    current_player_name = parts[2]
+
+    update_turn_info(current_round, current_player_name)
+
+def handle_cards_message(message):
+    # 處理撲克牌訊息
+    print(f"接收到撲克牌訊息: {message}")
+    # 解析撲克牌資料並顯示
+    cards_data = message.split(":")[1].strip()
+    random_cards = cards_data.split(',')
+    display_cards(random_cards)
 
 def handle_server_message(message):
     global client_socket, random_cards, current_player_name, current_player_id, current_round
@@ -334,12 +387,12 @@ def handle_server_message(message):
                 game_over_info = message.split(":", 1)[1].strip()
                 print(f"收到遊戲結束消息: {game_over_info}")
                 messagebox.showinfo("遊戲結束", message.split(":", 1)[1])
+                # 在遊戲結束後，重置界面，回到登入頁面
                 on_logout_click()
                 return True
             
-            # 以下逻辑只在游戏未结束时执行
             if int(current_round) >= max_rounds:
-                print("遊戲已結束，忽略所有消息")
+                print(f"遊戲已結束，忽略所有消息")
                 return False
 
             if message.startswith("TURN:"):
@@ -348,13 +401,13 @@ def handle_server_message(message):
                 current_round, current_player_id, current_player_name = turn_data.split(",")
                 print(f"處理 TURN 消息: 回合: {current_round}, 玩家ID: {current_player_id}, 玩家名稱: {current_player_name}")
 
-                update_turn_info(current_round, current_player_name)
+                if int(current_round) < int(max_rounds):
+                    update_turn_info(current_round, current_player_name)
             elif message.startswith("BALANCES:"):
                 # 更新余額
                 balances = json.loads(message.split(":", 1)[1])
                 print(f"接收到 BALANCE 廣播消息：{balances}")
-                current_round_int = int(current_round)
-                if current_round_int < max_rounds:
+                if int(current_round) < int(max_rounds):
                     update_balances_gui(balances)
             elif message.startswith("CARDS:"):
                 # 接收伺服器廣播的撲克牌
@@ -367,6 +420,16 @@ def handle_server_message(message):
         except Exception as e:
             print(f"接收到的 server 廣播時發生錯誤: {e}")
             break
+
+# 重置遊戲狀態
+def reset_game_state():
+    global random_cards, player_balance, current_round
+
+    # 清空顯示的撲克牌
+    random_cards = None
+    player_balance = 2000  # 重置玩家餘額
+    current_round = 1  # 重置回合數
+    current_player_name = None
 
 # 比較三張牌的函數
 def compare_cards(first_card, second_card, third_card, bet_amount):
@@ -399,7 +462,6 @@ def compare_cards(first_card, second_card, third_card, bet_amount):
     except Exception as e:
         print(f"比較牌時發生錯誤: {e}")
         return 0  # 發生錯誤時不改變金額
-
 
 # 登出函數
 def on_logout_click():

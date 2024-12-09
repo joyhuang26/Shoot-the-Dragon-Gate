@@ -1,4 +1,4 @@
-# cd Desktop/ShootDragonGate
+# cd Desktop/ShootDragonGate1
 
 import socket
 import threading
@@ -44,6 +44,29 @@ server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server_socket.bind(('localhost', 8786))
 server_socket.listen(5)
 
+def reset_game():
+    global players, turn_order, current_turn_index, round_count, balances, used_cards, deck, shared_cards, registered_players, logged_in_players
+
+    # 重置玩家列表
+    players.clear()
+    turn_order.clear()
+    balances.clear()
+
+    # 重置回合數和當前回合
+    round_count = 1
+    current_turn_index = 0
+
+    # 重置牌堆
+    used_cards = []
+    deck = [f"{rank}_of_{suit}" for suit in suits for rank in ranks]  # 重建牌堆
+    shared_cards = random.sample(deck, 2)
+
+    # 清空注冊和已登入玩家列表
+    #registered_players.clear()
+    logged_in_players.clear()
+
+    print("遊戲重置，所有玩家信息已清除，回合數重置為 1")
+
 # 廣播當前輪到的玩家
 def broadcast_current_turn():
     global turn_order, current_turn_index
@@ -65,10 +88,11 @@ def broadcast_current_turn():
 # 四回合已結束，公布獲勝者
 def check_game_over():
     global turn_order, balances
-    if round_count >= max_rounds:
+    if round_count == max_rounds:
         winner_id = max(balances, key=balances.get)
         winner_name = players[winner_id][0]
         winner_balance = balances[winner_id]
+        print(f"check_game_over: round_count = {round_count}")
         print(f"遊戲結束，贏家: {winner_name}, 編號: {winner_id}, 籌碼餘額: {winner_balance}")
 
         # 廣播遊戲結束消息
@@ -81,10 +105,11 @@ def check_game_over():
 
         # 停止廣播其他消息
         turn_order.clear()
+        # 重置遊戲
+        reset_game()
         return True
 
     return False
-
 
 # 輪到下一位玩家
 def update_turn():
@@ -92,14 +117,16 @@ def update_turn():
     current_turn_index = (current_turn_index + 1) % len(turn_order)
     if current_turn_index == 0:
         round_count += 1
+        if round_count == 5:
+            broadcast_current_turn()
     if check_game_over():
         return
     
     # 添加延時確保廣播順序
-    broadcast_balances()
-    time.sleep(0.5)
-    broadcast_current_turn()
-
+    if int(round_count) < int(max_rounds):
+        broadcast_balances()
+        time.sleep(0.5)
+        broadcast_current_turn()
 
 # 廣播每個玩家籌碼餘額
 def broadcast_balances():
@@ -194,6 +221,7 @@ def handle_client(client_socket):
                 print(f"{player_name} 已經離開遊戲。")
                 break
             elif message.startswith("UPDATE_BALANCE"):
+                #print(f"收到 UPDATE_BALANCE 廣播 {message}")
                 _, new_balance = message.split(":")
                 new_balance = int(new_balance)
                 balances[player_id] = int(new_balance)
@@ -209,7 +237,6 @@ def handle_client(client_socket):
                 # 延迟确保消息顺序正确
                 time.sleep(0.1)
                 broadcast_current_turn()
-
             elif message == "NEW_CARDS":
                 # 重新生成撲克牌
                 if len(deck) >= 2:
@@ -236,12 +263,7 @@ def handle_client(client_socket):
         print(f"處理玩家時的錯誤: {e}")
     finally:
         # 關閉連接並從玩家列表中移除
-        if player_name in players:
-            del players[player_id]
-            del balances[player_id]
-            turn_order.remove(player_id)
-        if player_name in logged_in_players:
-            logged_in_players[player_name] = True;
+        reset_game()
         client_socket.close()
         if round_count < max_rounds:
             broadcast_balances()
